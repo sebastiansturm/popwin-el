@@ -147,6 +147,12 @@ minibuffer window is selected."
 
 (defvar popwin:dummy-buffer nil)
 
+(defvar popwin:quit-buffer-query-function nil)
+(make-variable-buffer-local 'popwin:quit-buffer-query-function)
+
+(defvar popwin:switch-buffer-query-function nil)
+(make-variable-buffer-local 'popwin:switch-buffer-query-function)
+
 (defun popwin:dummy-buffer ()
   (if (buffer-live-p popwin:dummy-buffer)
       popwin:dummy-buffer
@@ -550,6 +556,25 @@ the popup window will be closed are followings:
                  (buffer-live-p window-buffer)
                  (not (eq popwin:popup-buffer window-buffer))))
            (popup-window-alive (popwin:popup-window-live-p)))
+      (when (and quit-requested popwin:quit-buffer-query-function)
+        ;; popwin:quit-buffer-query-function is defined:
+        ;; if it returns nil, quitting is not allowed
+        (unless (funcall popwin:quit-buffer-query-function)
+          (setq quit-requested nil) nil))
+      (message popup-buffer-buried)
+      (when (and (not minibuf-window-p) popup-buffer-alive
+                 (or (not (eq (current-buffer) popwin:popup-buffer))
+                     other-window-selected))
+        (let ((switch-buffer-query-function
+               (with-current-buffer popwin:popup-buffer popwin:switch-buffer-query-function))) 
+          ;; the user has switched to a different window without asking
+          ;; popwin:switch-buffer-query-function for permission. Since
+          ;; the popup buffer is still alive, we do so now and switch back
+          ;; if popwin:switch-buffer-query-function returns nil.
+          (unless (funcall switch-buffer-query-function)
+            (if other-window-selected (progn (popwin:popup-last-buffer)
+                                             (setq other-window-selected nil))
+              (switch-to-buffer popwin:popup-buffer)))))
       (when (or quit-requested
                 (not popup-buffer-alive)
                 popup-buffer-buried
@@ -617,14 +642,20 @@ the popup window will be closed are followings:
                              noselect
                              dedicated
                              stick
-                             tail)
+                             tail
+                             kill-buffer-query-function
+                             quit-buffer-query-function
+                             switch-buffer-query-function)
   "Show BUFFER in a popup window and return the popup window. If
 NOSELECT is non-nil, the popup window will not be selected. If
 STICK is non-nil, the popup window will be stuck. If TAIL is
 non-nil, the popup window will show the last contents. Calling
 `popwin:popup-buffer' during `popwin:popup-buffer' is allowed. In
 that case, the buffer of the popup window will be replaced with
-BUFFER."
+BUFFER. If the user tries to kill, quit or switch away from the
+popup buffer, KILL-, QUIT- or SWITCH-QUERY-FUNCTION will be called
+and the action is aborted if the respective query-function returns
+nil."
   (interactive "BPopup buffer:\n")
   (setq buffer (get-buffer buffer))
   (popwin:push-context)
@@ -650,6 +681,11 @@ BUFFER."
         (popwin:start-close-popup-window-timer))
       (with-selected-window popwin:popup-window
         (popwin:switch-to-buffer buffer)
+        (when kill-buffer-query-function
+          (add-to-list (make-local-variable 'kill-buffer-query-functions)
+                       kill-buffer-query-function))
+        (setq popwin:quit-buffer-query-function quit-buffer-query-function
+              popwin:switch-buffer-query-function switch-buffer-query-function)
         (when tail
           (set-window-point popwin:popup-window (point-max))
           (recenter -2)))
