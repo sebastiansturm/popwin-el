@@ -561,7 +561,6 @@ the popup window will be closed are followings:
         ;; if it returns nil, quitting is not allowed
         (unless (funcall popwin:quit-buffer-query-function)
           (setq quit-requested nil) nil))
-      (message popup-buffer-buried)
       (when (and (not minibuf-window-p) popup-buffer-alive
                  (or (not (eq (current-buffer) popwin:popup-buffer))
                      other-window-selected))
