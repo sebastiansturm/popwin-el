@@ -571,10 +571,14 @@ the popup window will be closed are followings:
           ;; popwin:switch-buffer-query-function for permission. Since
           ;; the popup buffer is still alive, we do so now and switch back
           ;; if popwin:switch-buffer-query-function returns nil.
-          (unless (funcall switch-buffer-query-function)
-            (if other-window-selected (progn (popwin:popup-last-buffer)
-                                             (setq other-window-selected nil))
-              (switch-to-buffer popwin:popup-buffer)))))
+          (when switch-buffer-query-function
+            (unless (with-current-buffer popwin:popup-buffer
+                      ;; TODO: maybe pass the new (current-buffer) to
+                      ;; switch-buffer-query-function?
+                      (funcall switch-buffer-query-function))
+              (if other-window-selected (progn (popwin:popup-last-buffer)
+                                               (setq other-window-selected nil))
+                (switch-to-buffer popwin:popup-buffer))))))
       (when (or quit-requested
                 (not popup-buffer-alive)
                 popup-buffer-buried
